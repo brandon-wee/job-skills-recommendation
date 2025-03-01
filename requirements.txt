@@ -1,0 +1,17 @@
+requests
+flask
+flask-cors
+supabase
+python-dotenv
+beautifulsoup4
+gunicorn
+langchain
+langchain-core
+langchain-community
+langchain-google-genai
+pydantic
+pypdf2
+pandas
+langgraph
+faiss-cpu
+typing-extensions
