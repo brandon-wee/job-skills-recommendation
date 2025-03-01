@@ -3,6 +3,7 @@ import bs4
 import pandas as pd
 from typing_extensions import TypedDict
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_community.docstore.in_memory import InMemoryDocstore
@@ -21,7 +22,8 @@ import PyPDF2, io, base64
 load_dotenv()
 
 llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash", api_key=os.getenv("GOOGLE_API_KEY"), temperature=0.7)
-embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
+# embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
+embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 vector_store = FAISS(embedding_function=embeddings,
                      index = faiss.IndexFlatIP(len(embeddings.embed_query("Hello World!"))),
                      docstore=InMemoryDocstore(),
