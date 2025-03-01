@@ -84,7 +84,7 @@ def custom_web_loader(doc_links):
 def retrieve(state):
     keyword = state["question"].split('"')[1]
     print(f"Retrieving documents for keyword: {keyword}")
-    retrieved_docs = vector_store.similarity_search(keyword, k=3)
+    retrieved_docs = vector_store.similarity_search(keyword, k=2)
     print(retrieved_docs)
     return {"context": retrieved_docs}
 
@@ -118,19 +118,25 @@ doc_links = (f"https://www.onetonline.org/link/summary/{code}" for code in doc_c
 
 index_path = "faiss_index"
 
-print("Indexing documents...")
-docs = custom_web_loader(doc_links)
-uuids = [str(uuid4()) for _ in range(len(docs))]
-print(f"Indexed {len(docs)} documents.")
-# text_splitter = RecursiveCharacterTextSplitter()
-# all_splits = text_splitter.split_documents(docs)
+if os.path.exists(index_path):
+    print("Loading index...")
+    vector_store = FAISS.load_local(index_path, embeddings, allow_dangerous_deserialization=True)
+else:
+    
+    print("Indexing documents...")
+    docs = custom_web_loader(doc_links)
+    uuids = [str(uuid4()) for _ in range(len(docs))]
+    print(f"Indexed {len(docs)} documents.")
+    # text_splitter = RecursiveCharacterTextSplitter()
+    # all_splits = text_splitter.split_documents(docs)
 
-batch_size = 100
-for i in range(0, len(docs), batch_size):
-    batch_docs = docs[i:i + batch_size]
-    batch_uuids = uuids[i:i + batch_size]
-    vector_store.add_documents(documents=batch_docs, ids=batch_uuids)
+    batch_size = 30
+    for i in range(0, len(docs), batch_size):
+        batch_docs = docs[i:i + batch_size]
+        batch_uuids = uuids[i:i + batch_size]
+        vector_store.add_documents(documents=batch_docs, ids=batch_uuids)
 
+    vector_store.save_local(index_path)
 # Define RAG pipeline
 prompt = hub.pull("rlm/rag-prompt")
 
@@ -156,6 +162,6 @@ The user's resume skills are as follows:
 
 
 if __name__ == "__main__":
-    occupation = "Software Developers"
-    # print(retrieve({"question": occupation}))
-    print(get_skills_recommendation(occupation, "Python, Machine Learning, Data Analysis, Communication"))
+    occupation = '"Software Developers"'
+    print(retrieve({"question": occupation}))
+    # print(get_skills_recommendation(occupation, "Python, Machine Learning, Data Analysis, Communication"))
