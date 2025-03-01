@@ -9,6 +9,7 @@ langchain
 langchain-core
 langchain-community
 langchain-google-genai
+langchain-openai
 pydantic
 pypdf2
 pandas
