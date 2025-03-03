@@ -17,24 +17,29 @@ import faiss
 from uuid import uuid4
 import requests
 from bs4 import BeautifulSoup
-import PyPDF2, io, base64
+import PyPDF2
+import io
+import base64
 
 load_dotenv()
 
-llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash", api_key=os.getenv("GOOGLE_API_KEY"), temperature=0.7)
+llm = ChatGoogleGenerativeAI(model="models/gemini-2.0-flash",
+                             api_key=os.getenv("GOOGLE_API_KEY"), temperature=0.7)
 # embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 vector_store = FAISS(embedding_function=embeddings,
-                     index = faiss.IndexFlatIP(len(embeddings.embed_query("Hello World!"))),
+                     index=faiss.IndexFlatIP(
+                         len(embeddings.embed_query("Hello World!"))),
                      docstore=InMemoryDocstore(),
                      index_to_docstore_id={}
-                    )
+                     )
 
 
 class State(TypedDict):
     question: str
     context: List   # List of Document objects returned from retrieval
     answer: str
+
 
 def preprocess(file):
     file = [line.strip() for line in file.splitlines() if line.strip()]
@@ -45,13 +50,13 @@ def preprocess(file):
     for line in file:
         if line == "Occupation-Specific Information":
             occupation_specific_information_count += 1
-        
+
         if occupation_specific_information_count != 2:
             continue
-        
+
         if line == "Related occupations":
             continue
-        
+
         if line == "Training & Credentials":
             training_n_credentials = True
             continue
@@ -59,16 +64,18 @@ def preprocess(file):
         if training_n_credentials:
             if line == "back to top":
                 training_n_credentials = False
-            
+
             continue
 
         if line == "Workforce Characteristics":
             break
 
-        filtered_file.append(line.replace("—", "-").replace("”", "'").replace("“", "'").replace("’", "'"))
-    
+        filtered_file.append(line.replace(
+            "—", "-").replace("”", "'").replace("“", "'").replace("’", "'"))
+
     print(file[0] + " has been processed.")
     return "\n".join(filtered_file), file[0]
+
 
 def custom_web_loader(doc_links):
     docs = []
@@ -76,23 +83,27 @@ def custom_web_loader(doc_links):
         response = requests.get(link)
         soup = BeautifulSoup(response.content, 'html.parser')
         processed_text, title = preprocess(soup.get_text())
-        new_doc = Document(page_content=processed_text, metadata={"link": link, "title": title, "language": "en"})
+        new_doc = Document(page_content=processed_text, metadata={
+                           "link": link, "title": title, "language": "en"})
         docs.append(new_doc)
 
     return docs
+
 
 def retrieve(state):
     keyword = state["question"].split('"')[1]
     print(f"Retrieving documents for keyword: {keyword}")
     retrieved_docs = vector_store.similarity_search(keyword, k=2)
-    print(retrieved_docs)
     return {"context": retrieved_docs}
+
 
 def generate(state):
     docs_content = "\n\n".join(doc.page_content for doc in state["context"])
-    messages = prompt.invoke({"question": state["question"], "context": docs_content})
+    messages = prompt.invoke(
+        {"question": state["question"], "context": docs_content})
     response = llm.invoke(messages)
     return {"answer": response.content}
+
 
 def build_graph():
     graph_builder = StateGraph(State).add_sequence([retrieve, generate])
@@ -100,29 +111,34 @@ def build_graph():
     graph = graph_builder.compile()
     return graph
 
+
 def decode_pdf(pdf_data: str) -> bytes:
     """Decodes JSON Base64 string back into PDF bytes."""
     pdf_bytes = base64.b64decode(pdf_data)  # Decode Base64 back to bytes
     return io.BytesIO(pdf_bytes)
 
+
 def read_pdf(resume_bytes):
     pdf = PyPDF2.PdfReader(decode_pdf(resume_bytes))
     text = ""
     for page in pdf.pages:
-            text += page.extract_text() + '\n'
+        text += page.extract_text() + '\n'
     return text
+
 
 df = pd.read_csv("All_Occupations.csv")
 doc_code = df["Code"].tolist()
-doc_links = (f"https://www.onetonline.org/link/summary/{code}" for code in doc_code)
+doc_links = (
+    f"https://www.onetonline.org/link/summary/{code}" for code in doc_code)
 
 index_path = "faiss_index"
 
 if os.path.exists(index_path):
     print("Loading index...")
-    vector_store = FAISS.load_local(index_path, embeddings, allow_dangerous_deserialization=True)
+    vector_store = FAISS.load_local(
+        index_path, embeddings, allow_dangerous_deserialization=True)
 else:
-    
+
     print("Indexing documents...")
     docs = custom_web_loader(doc_links)
     uuids = [str(uuid4()) for _ in range(len(docs))]
@@ -138,7 +154,8 @@ else:
 
     vector_store.save_local(index_path)
 # Define RAG pipeline
-prompt = hub.pull("rlm/rag-prompt")
+prompt = hub.pull("dhruvdixit/canvas-rag-1")
+
 
 def get_skills_recommendation(job_occupation, resume_bytes):
     graph = build_graph()
@@ -156,12 +173,18 @@ The job occupation you are analyzing is "{job_occupation}".
 The user's resume skills are as follows: 
 {resume_contents}.
 """
-    result = graph.invoke({"question": question.format(job_occupation=job_occupation, resume_contents=read_pdf(resume_bytes))})
+    # result = graph.invoke({"question": question.format(
+    #     job_occupation=job_occupation, resume_contents=read_pdf(resume_bytes))})
+    result = graph.invoke({"question": question.format(
+        job_occupation=job_occupation, resume_contents=resume_bytes)})
     context_metadata = [doc.metadata for doc in result["context"]]
     return result["answer"], context_metadata
 
 
 if __name__ == "__main__":
-    occupation = '"Software Developers"'
-    print(retrieve({"question": occupation}))
-    # print(get_skills_recommendation(occupation, "Python, Machine Learning, Data Analysis, Communication"))
+    occupation = '"Full Stack Developer"'
+    # print(retrieve({"question": /occupation}))
+    answer, context = get_skills_recommendation(occupation,
+                                                "Python, Machine Learning, Data Analysis, Communication")
+
+    print(answer)
